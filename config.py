@@ -3,7 +3,7 @@ import os
 
 load_dotenv()
 
-AIMHARDER_URL = os.getenv("AIMHARDER_URL", "https://aimharder.com")
+AIMHARDER_URL = os.getenv("AIMHARDER_URL")
 USUARIO = os.getenv("USUARIO")
 CONTRASENA = os.getenv("CONTRASENA")
 
