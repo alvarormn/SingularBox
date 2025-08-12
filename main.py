@@ -32,8 +32,9 @@ def main():
     driver = start_driver(headless=True)
     try:
         login(driver, AIMHARDER_URL, USUARIO, CONTRASENA)
-        #rechazar_cookies(driver)
         driver.get('https://singularbox.aimharder.com/schedule?cl')
+        rechazar_cookies(driver)
+        
         if not seleccionar_dia(driver, target):
             raise RuntimeError(f"No pude seleccionar el día objetivo {target}")
         else:

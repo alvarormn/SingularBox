@@ -59,6 +59,7 @@ def seleccionar_clase(driver, nombre="CrossFit"):
     # 1) Intento directo sobre <select>
     try:
         Select(driver.find_element(By.ID, "filtroClases")).select_by_visible_text(nombre)
+        print(f"Clase '{nombre}' seleccionada directamente.")
         return True
     except Exception:
         pass
@@ -69,6 +70,7 @@ def seleccionar_clase(driver, nombre="CrossFit"):
             EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field"))
         )
         sb.clear(); sb.send_keys(nombre + "\n")
+        print(f"Clase '{nombre}' seleccionada mediante búsqueda.")
         return True
     except Exception:
         return False

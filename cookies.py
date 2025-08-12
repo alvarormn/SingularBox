@@ -6,6 +6,7 @@ def rechazar_cookies(driver, timeout=5):
     """Intenta ejecutar denyAllBtn() y si falla, hace clic en 'Denegar todas'."""
     try:
         driver.execute_script("denyAllBtn && denyAllBtn();")
+        print("Cookies rechazadas mediante script.")
         return True
     except Exception:
         pass
