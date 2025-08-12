@@ -5,6 +5,8 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
+from cookies import rechazar_cookies    
+
 TZ = ZoneInfo("Europe/Madrid")
 
 def yyyymmdd(d):
@@ -26,6 +28,7 @@ def login(driver, base_url, usuario, contrasena, timeout=10):
     WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.ID, "frmLogin"))
     )
+    rechazar_cookies(driver)
     driver.find_element(By.ID, "mail").clear()
     driver.find_element(By.ID, "mail").send_keys(usuario)
     driver.find_element(By.ID, "pw").clear()
@@ -38,24 +41,19 @@ def login(driver, base_url, usuario, contrasena, timeout=10):
         )
     except TimeoutException:
         pass
+    print("Login realizado con éxito.")
     return True
 
 def seleccionar_dia(driver, dia):
+    print(f"Seleccionando día: {dia}")
     dstr = yyyymmdd(dia)
-    # Opción A: click sobre el ancla visible
+    print(f"Seleccionando día: {dstr}")
     try:
-        link = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, f"#weekDays a.wds{dstr}"))
-        )
-        link.click()
+        driver.execute_script(f"weekSelDay('{dstr}');")
         return True
     except Exception:
-        # Opción B: helper JS
-        try:
-            driver.execute_script(f"weekSelDay('{dstr}');")
-            return True
-        except Exception:
-            return False
+        return False
+
 
 def seleccionar_clase(driver, nombre="CrossFit"):
     # 1) Intento directo sobre <select>

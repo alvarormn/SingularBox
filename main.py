@@ -24,6 +24,7 @@ def start_driver(headless=True):
 
 def main():
     target = siguiente_dia_objetivo()
+    print(f"Objetivo: {target}")
     if not target:
         print("Hoy es fin de semana. No se ejecuta.")
         return
@@ -31,10 +32,12 @@ def main():
     driver = start_driver(headless=True)
     try:
         login(driver, AIMHARDER_URL, USUARIO, CONTRASENA)
-        rechazar_cookies(driver)
-
+        #rechazar_cookies(driver)
+        driver.get('https://singularbox.aimharder.com/schedule?cl')
         if not seleccionar_dia(driver, target):
             raise RuntimeError(f"No pude seleccionar el día objetivo {target}")
+        else:
+            print(f"Día objetivo {target} seleccionado ✔")
 
         if not seleccionar_clase(driver, "CrossFit"):
             raise RuntimeError("No pude fijar el filtro de clase en 'CrossFit'")
