@@ -12,7 +12,7 @@ on:
         required: false
         default: "false"
   schedule:
-    # Ejecuta cada hora; gateamos a 08:00 Europe/Madrid dentro del job
+    # Lanza cada hora; gateamos a 08:00 Europe/Madrid
     - cron: "0 * * * *"
 
 permissions:
@@ -36,7 +36,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Gateo por hora local (solo ejecuta a las 08:00 Europe/Madrid si viene por cron)
       - name: Gate by Europe/Madrid time
         id: gate
         shell: bash
@@ -58,29 +57,20 @@ jobs:
       - name: Set up Docker Buildx
         if: steps.gate.outputs.should_run == 'true'
         uses: docker/setup-buildx-action@v3
-
-      - name: Set up Docker Buildx
-        if: steps.gate.outputs.should_run == 'true'
-        uses: docker/setup-buildx-action@v3
         with:
           driver: docker-container
           install: true
 
+      # >>>> Build con caché GHA (sin pasos de mv/rm locales)
       - name: Build image (Buildx + GHA cache)
         if: steps.gate.outputs.should_run == 'true'
-        run: |
-          docker buildx build \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            -t singularbox:latest \
-            --load \
-            .
-
-      - name: Move cache
-        if: steps.gate.outputs.should_run == 'true'
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: singularbox:latest   # tag local para poder hacer docker run
+          load: true                 # carga la imagen en el daemon local del runner
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run container (with retries)
         if: steps.gate.outputs.should_run == 'true'
@@ -88,7 +78,7 @@ jobs:
           AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
           USUARIO:       ${{ secrets.AIMHARDER_USER }}
           CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
-          # añade aquí más secrets si tu script los usa, p.ej. SMTP_*
+          # añade aquí más secrets si tu script los usa (SMTP, etc.)
         run: |
           set -e
           mkdir -p logs
@@ -97,7 +87,6 @@ jobs:
           do
             ATTEMPTS=$((ATTEMPTS+1))
             echo "Intento $ATTEMPTS..."
-            # Ajusta el comando si tu entrypoint no es main.py
             if docker run --rm \
               -e TZ \
               -e AIMHARDER_URL \
@@ -113,7 +102,6 @@ jobs:
             echo "Fallo en intento $ATTEMPTS; reintentando en 15s..."
             sleep 15
           done
-          # Falla si tras 3 intentos sigue mal
           if [ $ATTEMPTS -ge 3 ]; then
             echo "Fallo tras múltiples intentos" | tee -a logs/run.err
             exit 1
