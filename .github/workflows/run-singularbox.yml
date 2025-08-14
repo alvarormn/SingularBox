@@ -72,46 +72,74 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run container (with retries)
+            - name: Validate required secrets
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          missing=0
+          for v in AIMHARDER_URL USUARIO CONTRASENA; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta variable $v (¿secret no creado o nombre incorrecto?)"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+        env:
+          AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
+          USUARIO:       ${{ secrets.AIMHARDER_USER }}
+          CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
+
+      - name: Smoke test container (Python/Chrome/Driver)
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -e
+          echo "Python:"
+          docker run --rm singularbox:latest python -V
+          echo "Chrome/Chromium:"
+          docker run --rm singularbox:latest sh -lc 'chromium --version || chromium-browser --version || google-chrome --version || true'
+          echo "ChromeDriver:"
+          docker run --rm singularbox:latest sh -lc 'chromedriver --version || true'
+
+      - name: Run container (with retries + console logs)
         if: steps.gate.outputs.should_run == 'true'
         env:
           AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
           USUARIO:       ${{ secrets.AIMHARDER_USER }}
           CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
-          SMTP_HOST:     ${{ secrets.SMTP_HOST }}      
+          SMTP_HOST:     ${{ secrets.SMTP_HOST }}
           SMTP_PORT:     ${{ secrets.SMTP_PORT }}
           SMTP_USER:     ${{ secrets.SMTP_USER }}
           SMTP_PASS:     ${{ secrets.SMTP_PASS }}
           EMAIL_FROM:    ${{ secrets.EMAIL_FROM }}
           EMAIL_TO:      ${{ secrets.EMAIL_TO }}
-          # añade aquí más secrets si tu script los usa (SMTP, etc.)
+          TARGET_OFFSET: ${{ env.TARGET_OFFSET }}
+          TZ:            Europe/Madrid
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p logs
           ATTEMPTS=0
           until [ $ATTEMPTS -ge 3 ]
           do
             ATTEMPTS=$((ATTEMPTS+1))
             echo "Intento $ATTEMPTS..."
+            # Muestra stdout+stderr EN LA CONSOLA y guarda también en logs/run.all
             if docker run --rm \
               -e TZ \
               -e AIMHARDER_URL \
               -e USUARIO \
               -e CONTRASENA \
+              -e SMTP_HOST -e SMTP_PORT -e SMTP_USER -e SMTP_PASS -e EMAIL_FROM -e EMAIL_TO \
               -e TARGET_OFFSET \
               --shm-size=2g \
               singularbox:latest \
-              python main.py > logs/run.out 2> logs/run.err; then
+              python -u main.py 2>&1 | tee logs/run.all; then
               echo "Ejecución OK"
               break
             fi
             echo "Fallo en intento $ATTEMPTS; reintentando en 15s..."
             sleep 15
           done
-          if [ $ATTEMPTS -ge 3 ]; then
-            echo "Fallo tras múltiples intentos" | tee -a logs/run.err
-            exit 1
-          fi
+          test $ATTEMPTS -lt 3 || (echo "Fallo tras múltiples intentos" | tee -a logs/run.all; exit 1)
+
 
       - name: Upload logs artifact
         if: always()
