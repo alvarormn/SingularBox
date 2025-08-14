@@ -1,0 +1,160 @@
+name: Run SingularBox (Docker + Selenium)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_day_offset:
+        description: "Días hacia delante (p. ej. 3)"
+        required: false
+        default: "3"
+      force_run:
+        description: "Ignorar gateo horario (true/false)"
+        required: false
+        default: "false"
+  schedule:
+    # Lanza cada hora; gateamos a 08:00 Europe/Madrid
+    - cron: "0 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: singularbox-prod
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      TZ: Europe/Madrid
+      TARGET_OFFSET: ${{ github.event.inputs.target_day_offset || '3' }}
+      FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Gate by Europe/Madrid time
+        id: gate
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            CURRENT_HOUR=$(TZ=Europe/Madrid date +%H)
+            if [[ "$CURRENT_HOUR" != "08" && "$FORCE_RUN" != "true" ]]; then
+              echo "Fuera de ventana (hora local: $CURRENT_HOUR). Salgo sin error."
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "should_run=true" >> $GITHUB_OUTPUT
+
+      - name: Stop early if gated
+        if: steps.gate.outputs.should_run != 'true'
+        run: echo "Ejecución omitida por ventana horaria."
+
+      - name: Set up Docker Buildx
+        if: steps.gate.outputs.should_run == 'true'
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          install: true
+
+      # >>>> Build con caché GHA (sin pasos de mv/rm locales)
+      - name: Build image (Buildx + GHA cache)
+        if: steps.gate.outputs.should_run == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: singularbox:latest   # tag local para poder hacer docker run
+          load: true                 # carga la imagen en el daemon local del runner
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+            - name: Validate required secrets
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          missing=0
+          for v in AIMHARDER_URL USUARIO CONTRASENA; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Falta variable $v (¿secret no creado o nombre incorrecto?)"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+        env:
+          AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
+          USUARIO:       ${{ secrets.AIMHARDER_USER }}
+          CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
+
+      - name: Smoke test container (Python/Chrome/Driver)
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          set -e
+          echo "Python:"
+          docker run --rm singularbox:latest python -V
+          echo "Chrome/Chromium:"
+          docker run --rm singularbox:latest sh -lc 'chromium --version || chromium-browser --version || google-chrome --version || true'
+          echo "ChromeDriver:"
+          docker run --rm singularbox:latest sh -lc 'chromedriver --version || true'
+
+      - name: Run container (with retries + console logs)
+        if: steps.gate.outputs.should_run == 'true'
+        env:
+          AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
+          USUARIO:       ${{ secrets.AIMHARDER_USER }}
+          CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
+          SMTP_HOST:     ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:     ${{ secrets.SMTP_PORT }}
+          SMTP_USER:     ${{ secrets.SMTP_USER }}
+          SMTP_PASS:     ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM:    ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO:      ${{ secrets.EMAIL_TO }}
+          TARGET_OFFSET: ${{ env.TARGET_OFFSET }}
+          TZ:            Europe/Madrid
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          ATTEMPTS=0
+          until [ $ATTEMPTS -ge 3 ]
+          do
+            ATTEMPTS=$((ATTEMPTS+1))
+            echo "Intento $ATTEMPTS..."
+            # Muestra stdout+stderr EN LA CONSOLA y guarda también en logs/run.all
+            if docker run --rm \
+              -e TZ \
+              -e AIMHARDER_URL \
+              -e USUARIO \
+              -e CONTRASENA \
+              -e SMTP_HOST -e SMTP_PORT -e SMTP_USER -e SMTP_PASS -e EMAIL_FROM -e EMAIL_TO \
+              -e TARGET_OFFSET \
+              --shm-size=2g \
+              singularbox:latest \
+              python -u main.py 2>&1 | tee logs/run.all; then
+              echo "Ejecución OK"
+              break
+            fi
+            echo "Fallo en intento $ATTEMPTS; reintentando en 15s..."
+            sleep 15
+          done
+          test $ATTEMPTS -lt 3 || (echo "Fallo tras múltiples intentos" | tee -a logs/run.all; exit 1)
+
+
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: singularbox-logs-${{ github.run_id }}
+          path: logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Resultado de la ejecución" >> $GITHUB_STEP_SUMMARY
+          echo "- Evento: \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Hora local (Europe/Madrid): \`$(TZ=Europe/Madrid date)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- TARGET_OFFSET: \`$TARGET_OFFSET\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Logs: artifact **singularbox-logs-${{ github.run_id }}**" >> $GITHUB_STEP_SUMMARY
