@@ -1,0 +1,138 @@
+name: Run SingularBox (Docker + Selenium)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_day_offset:
+        description: "Días hacia delante (p. ej. 3)"
+        required: false
+        default: "3"
+      force_run:
+        description: "Ignorar gateo horario (true/false)"
+        required: false
+        default: "false"
+  schedule:
+    # Ejecuta cada hora; gateamos a 08:00 Europe/Madrid dentro del job
+    - cron: "0 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: singularbox-prod
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      TZ: Europe/Madrid
+      TARGET_OFFSET: ${{ github.event.inputs.target_day_offset || '3' }}
+      FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gateo por hora local (solo ejecuta a las 08:00 Europe/Madrid si viene por cron)
+      - name: Gate by Europe/Madrid time
+        id: gate
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            CURRENT_HOUR=$(TZ=Europe/Madrid date +%H)
+            if [[ "$CURRENT_HOUR" != "08" && "$FORCE_RUN" != "true" ]]; then
+              echo "Fuera de ventana (hora local: $CURRENT_HOUR). Salgo sin error."
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "should_run=true" >> $GITHUB_OUTPUT
+
+      - name: Stop early if gated
+        if: steps.gate.outputs.should_run != 'true'
+        run: echo "Ejecución omitida por ventana horaria."
+
+      - name: Set up Docker Buildx
+        if: steps.gate.outputs.should_run == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        if: steps.gate.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('**/Dockerfile', '**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build image
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          docker build \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            -t singularbox:latest .
+
+      - name: Move cache
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Run container (with retries)
+        if: steps.gate.outputs.should_run == 'true'
+        env:
+          AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
+          USUARIO:       ${{ secrets.AIMHARDER_USER }}
+          CONTRASENA:    ${{ secrets.AIMHARDER_PASS }}
+          # añade aquí más secrets si tu script los usa, p.ej. SMTP_*
+        run: |
+          set -e
+          mkdir -p logs
+          ATTEMPTS=0
+          until [ $ATTEMPTS -ge 3 ]
+          do
+            ATTEMPTS=$((ATTEMPTS+1))
+            echo "Intento $ATTEMPTS..."
+            # Ajusta el comando si tu entrypoint no es main.py
+            if docker run --rm \
+              -e TZ \
+              -e AIMHARDER_URL \
+              -e USUARIO \
+              -e CONTRASENA \
+              -e TARGET_OFFSET \
+              --shm-size=2g \
+              singularbox:latest \
+              python main.py > logs/run.out 2> logs/run.err; then
+              echo "Ejecución OK"
+              break
+            fi
+            echo "Fallo en intento $ATTEMPTS; reintentando en 15s..."
+            sleep 15
+          done
+          # Falla si tras 3 intentos sigue mal
+          if [ $ATTEMPTS -ge 3 ]; then
+            echo "Fallo tras múltiples intentos" | tee -a logs/run.err
+            exit 1
+          fi
+
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: singularbox-logs-${{ github.run_id }}
+          path: logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Resultado de la ejecución" >> $GITHUB_STEP_SUMMARY
+          echo "- Evento: \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Hora local (Europe/Madrid): \`$(TZ=Europe/Madrid date)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- TARGET_OFFSET: \`$TARGET_OFFSET\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Logs: artifact **singularbox-logs-${{ github.run_id }}**" >> $GITHUB_STEP_SUMMARY
