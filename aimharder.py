@@ -4,6 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+import os, time, pathlib
 
 from cookies import rechazar_cookies    
 
@@ -22,27 +23,89 @@ def siguiente_dia_objetivo(ahora=None):
         target += timedelta(days=1)
     return target
 
-def login(driver, base_url, usuario, contrasena, timeout=10):
-    driver.get(base_url)
-    # Espera el formulario de login
-    WebDriverWait(driver, timeout).until(
-        EC.presence_of_element_located((By.ID, "frmLogin"))
-    )
-    rechazar_cookies(driver)
-    driver.find_element(By.ID, "mail").clear()
-    driver.find_element(By.ID, "mail").send_keys(usuario)
-    driver.find_element(By.ID, "pw").clear()
-    driver.find_element(By.ID, "pw").send_keys(contrasena)
-    driver.find_element(By.ID, "loginSubmit").click()
-    # Heurística: espera que desaparezca el login o aparezca algo de sesión
+
+def _dump_diag(driver, reason="login_timeout"):
+    out_dir = pathlib.Path(os.getenv("ARTIFACT_DIR", "/tmp")) / f"diag_{int(time.time())}_{reason}"
+    out_dir.mkdir(parents=True, exist_ok=True)
     try:
-        WebDriverWait(driver, timeout).until_not(
-            EC.presence_of_element_located((By.ID, "frmLogin"))
-        )
-    except TimeoutException:
+        out_dir.joinpath("current_url.txt").write_text(driver.current_url)
+        out_dir.joinpath("source.html").write_text(driver.page_source)
+        driver.get_screenshot_as_file(str(out_dir / "snap.png"))
+    except Exception:
         pass
-    print("Login realizado con éxito.")
-    return True
+    return out_dir
+
+def login(driver, base_url, user, pwd, timeout=25):
+    base = (base_url or "").rstrip("/")
+    if not base:
+        raise RuntimeError("AIMHARDER_URL vacío")
+    # Ir directo a /login si existe
+    driver.get(f"{base}")
+
+    # 1) Banner de cookies (varias opciones)
+    try:
+        driver.execute_script("if (typeof denyAllBtn==='function') denyAllBtn();")
+    except Exception:
+        pass
+    for xp in [
+        "//button[contains(., 'Rechazar') or contains(., 'Rechazar todo') or contains(., 'Denegar')]",
+        "//button[contains(., 'Reject') or contains(., 'Deny')]",
+        "//button[contains(., 'Aceptar') and contains(., 'solo necesarias')]",
+    ]:
+        try:
+            WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.XPATH, xp))).click()
+            break
+        except TimeoutException:
+            pass
+
+    # 2) CTA “Iniciar sesión” si no estamos en el formulario
+    try:
+        WebDriverWait(driver, 4).until(EC.any_of(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
+            EC.presence_of_element_located((By.XPATH, "//input[@name='email' or @id='email']"))
+        ))
+    except TimeoutException:
+        try:
+            cta = WebDriverWait(driver, 4).until(EC.element_to_be_clickable((
+                By.XPATH,
+                "//a[normalize-space()='Iniciar sesión' or normalize-space()='Log in']"
+                "|//button[normalize-space()='Iniciar sesión' or normalize-space()='Log in']"
+            )))
+            cta.click()
+        except TimeoutException:
+            pass  # puede que ya estemos en /login
+
+    # 3) Localizar campos de email/clave por varias rutas
+    try:
+        email = WebDriverWait(driver, timeout).until(EC.any_of(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
+            EC.presence_of_element_located((By.NAME, "email")),
+            EC.presence_of_element_located((By.ID, "email")),
+        ))
+        pwd_in = WebDriverWait(driver, timeout).until(EC.any_of(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")),
+            EC.presence_of_element_located((By.NAME, "password")),
+            EC.presence_of_element_located((By.ID, "password")),
+        ))
+    except TimeoutException:
+        out = _dump_diag(driver, "no_inputs")
+        raise TimeoutException(f"No se encontraron inputs de login. Diag: {out}")  # re-lanza con pista
+
+    email.clear(); email.send_keys(user)
+    pwd_in.clear();  pwd_in.send_keys(pwd)
+    pwd_in.submit()
+
+    # 4) Validar post-login
+    try:
+        WebDriverWait(driver, timeout).until(EC.any_of(
+            EC.presence_of_element_located((By.XPATH, "//a[contains(@href,'logout') or contains(., 'Salir')]")),
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".user-menu, [data-testid='profile'], .avatar")),
+            EC.url_contains("/dashboard"),
+        ))
+    except TimeoutException:
+        out = _dump_diag(driver, "post_login")
+        raise TimeoutException(f"No se detectó sesión iniciada. Diag: {out}")
+
 
 def seleccionar_dia(driver, dia):
     print(f"Seleccionando día: {dia}")
