@@ -1,10 +1,16 @@
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 from config import AIMHARDER_URL, USUARIO, CONTRASENA
 from cookies import rechazar_cookies
+from call import (
+    get_id_class,
+    bookClass
+)
+from createmails import create_email
 from aimharder import (
     siguiente_dia_objetivo,
     seleccionar_dia,
@@ -39,14 +45,21 @@ def main():
             raise RuntimeError(f"No pude seleccionar el día objetivo {target}")
         else:
             print(f"Día objetivo {target} seleccionado ✔")
+        
+        id_class = get_id_class(target)
+        boton = driver.find_element(By.XPATH, f'//a[contains(@onclick, "bookClass({id_class}, this, 0)")]')
 
-        if not seleccionar_clase(driver, "CrossFit"):
-            raise RuntimeError("No pude fijar el filtro de clase en 'CrossFit'")
+        ok, mensaje = bookClass(driver, id_class, boton, 0)
 
-        if reservar(driver, hora="07:00", nombre="CrossFit"):
-            print(f"Reserva intentada para {target} 07:00 CrossFit ✔")
-        else:
-            print(f"No se pudo reservar {target} 07:00 CrossFit ✖")
+        if not ok:
+            print(f"No se pudo reservar la clase para {target} 07:00 CrossFit ✖")
+            print(f"Mensaje: {mensaje}")
+            create_email(target,ok,mensaje)
+            driver.quit()
+        else: 
+            if ok:
+                print(f"Reserva con exito para {target} 07:00 - 08:00 CrossFit ✔")
+                create_email(target,ok,mensaje)
 
     finally:
         driver.quit()
