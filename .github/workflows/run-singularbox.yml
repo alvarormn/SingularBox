@@ -103,7 +103,7 @@ jobs:
           echo "ChromeDriver:"
           docker run --rm singularbox:latest sh -lc 'chromedriver --version || true'
 
-      - name: Run container (with retries + console logs)
+      - name: Run container (with retries + console logs + artifacts)
         if: steps.gate.outputs.should_run == 'true'
         env:
           AIMHARDER_URL: ${{ secrets.AIMHARDER_URL }}
@@ -116,23 +116,21 @@ jobs:
           EMAIL_FROM:    ${{ secrets.EMAIL_FROM }}
           EMAIL_TO:      ${{ secrets.EMAIL_TO }}
           TARGET_OFFSET: ${{ env.TARGET_OFFSET }}
-          TZ:            Europe/Madrid
         run: |
           set -euo pipefail
-          mkdir -p logs
+          mkdir -p logs artifacts
           ATTEMPTS=0
           until [ $ATTEMPTS -ge 3 ]
           do
             ATTEMPTS=$((ATTEMPTS+1))
             echo "Intento $ATTEMPTS..."
-            # Muestra stdout+stderr EN LA CONSOLA y guarda también en logs/run.all
             if docker run --rm \
-              -e TZ \
-              -e AIMHARDER_URL \
-              -e USUARIO \
-              -e CONTRASENA \
+              -e TZ=Europe/Madrid \
+              -e AIMHARDER_URL -e USUARIO -e CONTRASENA \
               -e SMTP_HOST -e SMTP_PORT -e SMTP_USER -e SMTP_PASS -e EMAIL_FROM -e EMAIL_TO \
               -e TARGET_OFFSET \
+              -e ARTIFACT_DIR=/out \
+              -v "$PWD/artifacts:/out" \
               --shm-size=2g \
               singularbox:latest \
               python -u main.py 2>&1 | tee logs/run.all; then
@@ -144,13 +142,14 @@ jobs:
           done
           test $ATTEMPTS -lt 3 || (echo "Fallo tras múltiples intentos" | tee -a logs/run.all; exit 1)
 
-
-      - name: Upload logs artifact
+      - name: Upload run logs & artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: singularbox-logs-${{ github.run_id }}
-          path: logs
+          name: singularbox-run-${{ github.run_id }}
+          path: |
+            logs
+            artifacts
           if-no-files-found: warn
           retention-days: 7
 
