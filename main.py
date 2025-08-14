@@ -1,8 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+
 
 from config import AIMHARDER_URL, USUARIO, CONTRASENA
 from cookies import rechazar_cookies
@@ -21,11 +20,9 @@ from aimharder import (
 
 def start_driver(headless=True):
     opts = Options()
-    if headless:
-        opts.add_argument("--headless=new")
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--window-size=1200,1000")
+    for a in ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1366,900"]:
+        opts.add_argument(a)
+    opts.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     return webdriver.Chrome(options=opts)
 
 def main():
