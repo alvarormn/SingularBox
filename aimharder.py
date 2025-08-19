@@ -6,6 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 import os, time, pathlib
 
+from utils_selenium import (wait_ready, first_present, find_in_any_frame, clickable, debug_dump )
+
 from cookies import rechazar_cookies    
 
 TZ = ZoneInfo("Europe/Madrid")
@@ -35,30 +37,14 @@ def _dump_diag(driver, reason="login_timeout"):
         pass
     return out_dir
 
-def login(driver, base_url, user, pwd, timeout=10):
+def login(driver, base_url, user, pwd, timeout=15):
     driver.get(base_url)
-    rechazar_cookies(driver)
+    wait_ready(driver, timeout=timeout)
 
-    print(driver)
-    # Espera a que aparezca el formulario de login
-
-    WebDriverWait(driver, timeout).until(
-        EC.presence_of_element_located((By.ID, "frmLogin"))
-    )
-    driver.find_element(By.ID, "mail").clear()
-    driver.find_element(By.ID, "mail").send_keys(user)
-    driver.find_element(By.ID, "pw").clear()
-    driver.find_element(By.ID, "pw").send_keys(pwd)
-    driver.find_element(By.ID, "loginSubmit").click()
-    # Heurística: espera que desaparezca el login o aparezca algo de sesión
     try:
-        WebDriverWait(driver, timeout).until_not(
-            EC.presence_of_element_located((By.ID, "frmLogin"))
-        )
-        return True
-    except TimeoutException:
-        pass
-        return False
+        rechazar_cookies(driver)
+    except Exception as e:
+        print(f"[WARN] rechazar_cookies falló: {e}. Continuamos.")
 
 
 def seleccionar_dia(driver, dia):

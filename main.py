@@ -1,4 +1,4 @@
-from selenium import webdriver
+from utils_selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 
