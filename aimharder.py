@@ -80,12 +80,12 @@ def login(driver, base_url, user, pwd, timeout=25):
         email = WebDriverWait(driver, timeout).until(EC.any_of(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
             EC.presence_of_element_located((By.NAME, "email")),
-            EC.presence_of_element_located((By.ID, "email")),
+            EC.presence_of_element_located((By.ID, "mail")),
         ))
         pwd_in = WebDriverWait(driver, timeout).until(EC.any_of(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")),
             EC.presence_of_element_located((By.NAME, "password")),
-            EC.presence_of_element_located((By.ID, "password")),
+            EC.presence_of_element_located((By.ID, "pw")),
         ))
     except TimeoutException:
         out = _dump_diag(driver, "no_inputs")
