@@ -41,41 +41,8 @@ def login(driver, base_url, user, pwd, timeout=25):
         raise RuntimeError("AIMHARDER_URL vacío")
     # Ir directo a /login si existe
     driver.get(f"{base}")
+    rechazar_cookies(driver)
 
-    # 1) Banner de cookies (varias opciones)
-    try:
-        driver.execute_script("if (typeof denyAllBtn==='function') denyAllBtn();")
-    except Exception:
-        pass
-    for xp in [
-        "//button[contains(., 'Rechazar') or contains(., 'Rechazar todo') or contains(., 'Denegar')]",
-        "//button[contains(., 'Reject') or contains(., 'Deny')]",
-        "//button[contains(., 'Aceptar') and contains(., 'solo necesarias')]",
-    ]:
-        try:
-            WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.XPATH, xp))).click()
-            break
-        except TimeoutException:
-            pass
-
-    # 2) CTA “Iniciar sesión” si no estamos en el formulario
-    try:
-        WebDriverWait(driver, 4).until(EC.any_of(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
-            EC.presence_of_element_located((By.XPATH, "//input[@name='email' or @id='email']"))
-        ))
-    except TimeoutException:
-        try:
-            cta = WebDriverWait(driver, 4).until(EC.element_to_be_clickable((
-                By.XPATH,
-                "//a[normalize-space()='Iniciar sesión' or normalize-space()='Log in']"
-                "|//button[normalize-space()='Iniciar sesión' or normalize-space()='Log in']"
-            )))
-            cta.click()
-        except TimeoutException:
-            pass  # puede que ya estemos en /login
-
-    # 3) Localizar campos de email/clave por varias rutas
     try:
         email = WebDriverWait(driver, timeout).until(EC.any_of(
             EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
@@ -94,17 +61,6 @@ def login(driver, base_url, user, pwd, timeout=25):
     email.clear(); email.send_keys(user)
     pwd_in.clear();  pwd_in.send_keys(pwd)
     pwd_in.submit()
-
-    # 4) Validar post-login
-    try:
-        WebDriverWait(driver, timeout).until(EC.any_of(
-            EC.presence_of_element_located((By.XPATH, "//a[contains(@href,'logout') or contains(., 'Salir')]")),
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".user-menu, [data-testid='profile'], .avatar")),
-            EC.url_contains("/dashboard"),
-        ))
-    except TimeoutException:
-        out = _dump_diag(driver, "post_login")
-        raise TimeoutException(f"No se detectó sesión iniciada. Diag: {out}")
 
 
 def seleccionar_dia(driver, dia):
