@@ -35,7 +35,7 @@ def _dump_diag(driver, reason="login_timeout"):
         pass
     return out_dir
 
-def login(driver, base_url, user, pwd, timeout=25):
+def login(driver, base_url, user, pwd, timeout=10):
     base = (base_url or "").rstrip("/")
     if not base:
         raise RuntimeError("AIMHARDER_URL vacío")
@@ -43,24 +43,22 @@ def login(driver, base_url, user, pwd, timeout=25):
     driver.get(f"{base}")
     rechazar_cookies(driver)
 
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.ID, "frmLogin"))
+    )
+    driver.find_element(By.ID, "mail").clear()
+    driver.find_element(By.ID, "mail").send_keys(user)
+    driver.find_element(By.ID, "pw").clear()
+    driver.find_element(By.ID, "pw").send_keys(pwd)
+    driver.find_element(By.ID, "loginSubmit").click()
+    # Heurística: espera que desaparezca el login o aparezca algo de sesión
     try:
-        email = WebDriverWait(driver, timeout).until(EC.any_of(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email']")),
-            EC.presence_of_element_located((By.NAME, "email")),
-            EC.presence_of_element_located((By.ID, "mail")),
-        ))
-        pwd_in = WebDriverWait(driver, timeout).until(EC.any_of(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")),
-            EC.presence_of_element_located((By.NAME, "password")),
-            EC.presence_of_element_located((By.ID, "pw")),
-        ))
+        WebDriverWait(driver, timeout).until_not(
+            EC.presence_of_element_located((By.ID, "frmLogin"))
+        )
     except TimeoutException:
-        out = _dump_diag(driver, "no_inputs")
-        raise TimeoutException(f"No se encontraron inputs de login. Diag: {out}")  # re-lanza con pista
-
-    email.clear(); email.send_keys(user)
-    pwd_in.clear();  pwd_in.send_keys(pwd)
-    pwd_in.submit()
+        pass
+    return True
 
 
 def seleccionar_dia(driver, dia):
