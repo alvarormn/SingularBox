@@ -16,6 +16,7 @@ def rechazar_cookies(driver, timeout=5):
             EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Denegar todas')]"))
         )
         btn.click()
+        print("Cookies rechazadas mediante click.")
         return True
     except Exception:
         return False
