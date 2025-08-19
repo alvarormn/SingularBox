@@ -39,7 +39,7 @@ def login(driver, base_url, user, pwd, timeout=10):
     driver.get(base_url)
     rechazar_cookies(driver)
 
-    print(base_url, user, pwd)
+    print(driver)
     # Espera a que aparezca el formulario de login
 
     WebDriverWait(driver, timeout).until(
