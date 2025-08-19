@@ -39,6 +39,9 @@ def login(driver, base_url, user, pwd, timeout=10):
     driver.get(base_url)
     rechazar_cookies(driver)
 
+    print(base_url, user, pwd)
+    # Espera a que aparezca el formulario de login
+
     WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.ID, "frmLogin"))
     )
