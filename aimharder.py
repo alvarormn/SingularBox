@@ -52,9 +52,10 @@ def login(driver, base_url, user, pwd, timeout=10):
         WebDriverWait(driver, timeout).until_not(
             EC.presence_of_element_located((By.ID, "frmLogin"))
         )
+        return True
     except TimeoutException:
         pass
-    return True
+        return False
 
 
 def seleccionar_dia(driver, dia):
