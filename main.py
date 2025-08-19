@@ -9,6 +9,7 @@ from call import (
     get_id_class,
     bookClass
 )
+from utils_selenium import (wait_ready, first_present, find_in_any_frame, clickable, debug_dump )
 from createmails import create_email
 from aimharder import (
     siguiente_dia_objetivo,
@@ -36,6 +37,7 @@ def main():
     try:
         login(driver, AIMHARDER_URL, USUARIO, CONTRASENA)
         driver.get('https://singularbox.aimharder.com/schedule?cl')
+        wait_ready(driver)
         rechazar_cookies(driver)
         
         if not seleccionar_dia(driver, target):
