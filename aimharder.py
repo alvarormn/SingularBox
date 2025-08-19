@@ -51,7 +51,13 @@ def seleccionar_dia(driver, dia):
     print(f"Seleccionando día: {dia}")
     dstr = yyyymmdd(dia)
     print(f"Seleccionando día: '{dstr}'")
+
+    
+
     try:
+        WebDriverWait(driver, 10).until(
+            lambda d: d.execute_script("return (typeof weekSelDay === 'function');")
+        )
         driver.execute_script(f"weekSelDay('{dstr}');")
         return True
     except Exception as e:
