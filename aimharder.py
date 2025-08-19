@@ -50,11 +50,15 @@ def login(driver, base_url, user, pwd, timeout=15):
 def seleccionar_dia(driver, dia):
     print(f"Seleccionando día: {dia}")
     dstr = yyyymmdd(dia)
-    print(f"Seleccionando día: {dstr}")
+    print(f"Seleccionando día: '{dstr}'")
     try:
         driver.execute_script(f"weekSelDay('{dstr}');")
         return True
-    except Exception:
+    except Exception as e:
+        import traceback
+        print("[ERROR] Fallo al ejecutar JS:")
+        print(e)  # mensaje corto
+        traceback.print_exc()  # stacktrace completo en consola
         return False
 
 
