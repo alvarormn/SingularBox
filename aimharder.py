@@ -36,11 +36,7 @@ def _dump_diag(driver, reason="login_timeout"):
     return out_dir
 
 def login(driver, base_url, user, pwd, timeout=10):
-    base = (base_url or "").rstrip("/")
-    if not base:
-        raise RuntimeError("AIMHARDER_URL vacío")
-    # Ir directo a /login si existe
-    driver.get(f"{base}")
+    driver.get(base_url)
     rechazar_cookies(driver)
 
     WebDriverWait(driver, timeout).until(
