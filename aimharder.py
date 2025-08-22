@@ -40,6 +40,7 @@ def _dump_diag(driver, reason="login_timeout"):
 def login(driver, base_url, user, pwd, timeout=15):
     driver.get(base_url)
     wait_ready(driver, timeout=timeout)
+    print("Logearse...")
 
     try:
         rechazar_cookies(driver)

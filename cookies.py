@@ -9,6 +9,7 @@ def rechazar_cookies(driver, timeout=5):
         print("Cookies rechazadas mediante script.")
         return True
     except Exception:
+        print("No se pudo ejecutar denyAllBtn()")
         pass
     # Fallback por texto
     try:
