@@ -9,7 +9,7 @@ on:
         default: "3"
   schedule:
     # Lanza cada hora; gateamos a 08:00 Europe/Madrid
-    - cron: "0 * * * *"
+    - cron: "0 5 * * *"
 
 permissions:
   contents: read
@@ -63,7 +63,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile
           tags: singularbox:latest   # tag local para poder hacer docker run
+          push: false                # no subir a ningún registro
           load: true                 # carga la imagen en el daemon local del runner
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -21,7 +21,7 @@ from aimharder import (
 
 def start_driver(headless=True):
     opts = Options()
-    for a in ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1366,900"]:
+    for a in ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]:
         opts.add_argument(a)
     opts.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     return webdriver.Chrome(options=opts)
